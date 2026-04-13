@@ -22,10 +22,7 @@ const generateApp = async (draft, idToken) => {
     },
     idToken,
   );
-
-  console.log(app);
   
-
   if (!app) {
     throw new Error(`Failed to create app "${draft.appName}"`);
   }
