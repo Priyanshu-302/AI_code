@@ -22,10 +22,6 @@ const collectedDataSchema = new mongoose.Schema(
       type: [String],
       default: null,
     },
-    painPoint: {
-      type: String,
-      default: null,
-    },
   },
   {
     _id: false,
@@ -67,7 +63,6 @@ const unifySessionSchema = new mongoose.Schema(
         "ask_category",
         "ask_workflow",
         "ask_tracking_entities",
-        "ask_pain_point",
         "review",
         "generating",
         "done",

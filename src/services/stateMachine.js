@@ -5,7 +5,6 @@ const STEP_ORDER = [
   "ask_category",
   "ask_workflow",
   "ask_tracking_entities",
-  "ask_pain_point",
   "review",
   "generating",
   "done",
@@ -20,7 +19,6 @@ const STEP_MESSAGES = {
   ask_workflow: "Describe the step-by-step workflow your app should support.",
   ask_tracking_entities:
     "What are the main things your app will track? (e.g. Students, Employees, Orders)",
-  ask_pain_point: "What problem or pain point is this app solving for you?",
   review:
     "Thanks! I have everything I need. Type 'yes' to generate a draft or 'no' to cancel.",
 };
@@ -60,15 +58,181 @@ const STEP_INPUT_HINTS = {
     type: "text",
     placeholder: "e.g. Students, Teachers, Employees",
   },
-  ask_pain_point: {
-    type: "textarea",
-    placeholder:
-      "e.g. We currently track attendance on paper and it's error-prone",
-  },
   review: {
     type: "single_select",
     options: ["yes", "no"],
   },
+};
+
+const CATEGORY_KEYWORDS = [
+  "category is",
+  "category:",
+  "category -",
+  "category",
+];
+const WORKFLOW_KEYWORDS = [
+  "workflow is",
+  "workflow:",
+  "workflow -",
+  "workflow",
+  "flow:",
+];
+const TRACKING_KEYWORDS = [
+  "tracking entities are",
+  "tracking entities:",
+  "entities are",
+  "entities:",
+  "track:",
+  "tracking:",
+  "track -",
+  "entities -",
+];
+
+const ALL_KEYWORDS = [
+  ...CATEGORY_KEYWORDS,
+  ...WORKFLOW_KEYWORDS,
+  ...TRACKING_KEYWORDS,
+];
+
+// Extract value after a keyword, stopping at the next keyword
+const extractKeyword = (text, startKeywords, stopKeywords) => {
+  const lower = text.toLowerCase();
+  let start = -1;
+
+  for (const kw of startKeywords) {
+    const idx = lower.indexOf(kw);
+    if (idx !== -1) {
+      start = idx + kw.length;
+      break;
+    }
+  }
+
+  if (start === -1) return null;
+
+  let end = text.length;
+  for (const kw of stopKeywords) {
+    const idx = lower.indexOf(kw, start);
+    if (idx !== -1 && idx < end) {
+      end = idx;
+    }
+  }
+
+  return text
+    .slice(start, end)
+    .replace(/,?\s*(the\s+)?$/i, "")
+    .trim();
+};
+
+// Fill data as much as you can
+const fillCollectedData = (message, collectedData) => {
+  const updated = { ...collectedData };
+
+  // Check if the message contains any field keywords
+  const lower = message.toLowerCase();
+  const hasKeyword = [
+    "category",
+    "workflow",
+    "flow",
+    "track",
+    "entit",
+  ].some((kw) => lower.includes(kw));
+
+  // If no keywords — split by comma for simple multi-answer like "Attendance Tracker, HR"
+  const parts = hasKeyword
+    ? [message]
+    : message
+        .split(",")
+        .map((p) => p.trim())
+        .filter(Boolean);
+
+  for (const part of parts) {
+    // Try to fill goal
+    if (!updated.goal) {
+      updated.goal = part;
+      if (!updated.appName) updated.appName = extractAppName(part);
+      continue;
+    }
+
+    // Try to fill appName
+    if (!updated.appName) {
+      updated.appName = part;
+      continue;
+    }
+
+    // Try to fill category
+    if (!updated.category) {
+      const fromKeyword = extractKeyword(part, CATEGORY_KEYWORDS, [
+        ...WORKFLOW_KEYWORDS,
+        ...TRACKING_KEYWORDS,
+      ]);
+      updated.category = (fromKeyword || part).trim();
+    }
+
+    // Try to fill workflowDescription
+    if (!updated.workflowDescription) {
+      const fromKeyword = extractKeyword(part, WORKFLOW_KEYWORDS, [
+        ...TRACKING_KEYWORDS,
+      ]);
+      if (fromKeyword) {
+        updated.workflowDescription = fromKeyword.trim();
+      } else if (!hasKeyword) {
+        updated.workflowDescription = part.trim();
+      }
+    }
+
+    // Try to fill trackingEntities
+    if (!updated.trackingEntities || updated.trackingEntities.length === 0) {
+      const fromKeyword = extractKeyword(
+        part,
+        TRACKING_KEYWORDS,
+        []
+      );
+      if (fromKeyword) {
+        updated.trackingEntities = fromKeyword
+          .split(/,|\band\b/i)
+          .map((e) => e.trim())
+          .filter(Boolean);
+      } else if (!hasKeyword) {
+        updated.trackingEntities = part
+          .split(/,|\band\b/i)
+          .map((e) => e.trim())
+          .filter(Boolean);
+      }
+    } else {
+      // No keyword mode — each comma-split part fills the next empty field in order
+      if (!updated.category) {
+        updated.category = part;
+        continue;
+      }
+      if (!updated.workflowDescription) {
+        updated.workflowDescription = part;
+        continue;
+      }
+      if (!updated.trackingEntities || updated.trackingEntities.length === 0) {
+        updated.trackingEntities = part
+          .split(/,|\band\b/i)
+          .map((e) => e.trim())
+          .filter(Boolean);
+        continue;
+      }
+    }
+  }
+
+  return updated;
+};
+
+// Get next unanswered step
+const getNextUnansweredStep = (collectedData) => {
+  if (!collectedData.goal) return "ask_goal";
+  if (!collectedData.appName) return "ask_app_name";
+  if (!collectedData.category) return "ask_category";
+  if (!collectedData.workflowDescription) return "ask_workflow";
+  if (
+    !collectedData.trackingEntities ||
+    collectedData.trackingEntities.length === 0
+  )
+    return "ask_tracking_entities";
+  return "review";
 };
 
 // Get the next step
@@ -85,10 +249,8 @@ const updateCollectedData = (currentStep, message, collectedData) => {
     goal: collectedData.goal || null,
     appName: collectedData.appName || null,
     category: collectedData.category || null,
-    workflowDescription:
-      collectedData.workflowDescription || null,
+    workflowDescription: collectedData.workflowDescription || null,
     trackingEntities: collectedData.trackingEntities || [],
-    painPoint: collectedData.painPoint || null,
   };
 
   switch (currentStep) {
@@ -112,9 +274,6 @@ const updateCollectedData = (currentStep, message, collectedData) => {
         .split(",")
         .map((e) => e.trim())
         .filter(Boolean);
-      break;
-    case "ask_pain_point":
-      updated.painPoint = message;
       break;
   }
 
@@ -149,8 +308,7 @@ const isReadyToGenerateDraft = (collectedData) => {
     !!collectedData.appName &&
     !!collectedData.category &&
     !!collectedData.workflowDescription &&
-    collectedData.trackingEntities.length > 0 &&
-    !!collectedData.painPoint
+    collectedData.trackingEntities.length > 0
   );
 };
 
@@ -166,6 +324,8 @@ const getInputHint = (step) => {
 
 module.exports = {
   getNextStep,
+  fillCollectedData,
+  getNextUnansweredStep,
   updateCollectedData,
   isReadyToGenerateDraft,
   getAssistantMessage,

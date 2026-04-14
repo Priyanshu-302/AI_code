@@ -3,7 +3,6 @@ const UnifySession = require("../models/unifySessions");
 const UnifyMessage = require("../models/unifyMessage");
 
 // Create Session + message persistence
-
 // POST /api/unify/sessions
 const createSession = async (req, res) => {
   try {
@@ -51,7 +50,6 @@ const createSession = async (req, res) => {
         category: null,
         workflow: null,
         trackingEntities: [],
-        painPoint: null,
       },
     });
 
@@ -177,12 +175,6 @@ const getInputHint = (step) => {
       return {
         type: "text",
         placeholder: "e.g. Students, Teachers, Employees",
-      };
-    case "ask_pain_point":
-      return {
-        type: "textarea",
-        placeholder:
-          "e.g. We currently track attendance on paper and it's error-prone",
       };
     case "review":
       return { type: "single_select", options: ["yes", "no"] };

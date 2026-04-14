@@ -10,7 +10,6 @@ Collected Data:
 - Category: ${collectedData.category}
 - Workflow: ${collectedData.workflowDescription}
 - Tracking Entities: ${collectedData.trackingEntities.join(", ")}
-- Pain Point: ${collectedData.painPoint}
 
 Generate a draft app specification in the following JSON format ONLY. No extra text, no markdown, no backticks:
 {

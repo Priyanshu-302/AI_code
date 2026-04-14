@@ -2,11 +2,11 @@ const { v4: uuidv4 } = require("uuid");
 const UnifySession = require("../models/unifySessions");
 const UnifyMessage = require("../models/unifyMessage");
 const {
-  getNextStep,
-  updateCollectedData,
   isReadyToGenerateDraft,
   getAssistantMessage,
   getInputHint,
+  fillCollectedData,
+  getNextUnansweredStep,
 } = require("../services/stateMachine");
 const {
   generateDraftSpec,
@@ -82,18 +82,17 @@ const sendMessage = async (req, res) => {
     // Step 1 - Update collectedData based on current step
     const currentData = session.collectedData.toObject();
 
-    const updatedData = updateCollectedData(currentStep, message, currentData);
+    const updatedData = fillCollectedData(message, currentData);
 
     session.collectedData.goal = updatedData.goal;
     session.collectedData.appName = updatedData.appName;
     session.collectedData.category = updatedData.category;
     session.collectedData.workflowDescription = updatedData.workflowDescription;
     session.collectedData.trackingEntities = updatedData.trackingEntities;
-    session.collectedData.painPoint = updatedData.painPoint;
     session.markModified("collectedData");
 
     // Step 2 - Get next step
-    const nextStep = getNextStep(currentStep);
+    const nextStep = getNextUnansweredStep(updatedData);
     session.currentStep = nextStep;
 
     // Step 3 - Save user message
@@ -140,8 +139,7 @@ const sendMessage = async (req, res) => {
       "collectedData.appName": updatedData.appName,
       "collectedData.category": updatedData.category,
       "collectedData.workflowDescription": updatedData.workflowDescription,
-      "collectedData.trackingEntities": updatedData.trackingEntities,
-      "collectedData.painPoint": updatedData.painPoint,
+      "collectedData.trackingEntities": updatedData.trackingEntities
     };
 
     // Only add draftSpec if draft was generated
